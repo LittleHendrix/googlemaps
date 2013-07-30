@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Test page</title>
+    <style type="text/css">
+        *, *:before, *:after {
+            -moz-box-sizing: border-box;
+            -webkit-box-sizing: border-box;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif; 
+        }
+        #map-wrapper {
+            width: 100%;
+            height: 600px;
+            padding: 4px;
+            border: 1px solid #eaeaea;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        #panel {
+            margin-bottom: 17px;
+        }
+        input[id=target] {
+            min-width: 350px;
+            padding: 3px 7px;
+            border: 1px solid #eaeaea;
+            border-radius: 3px;
+        }
+    </style>
+    <script src="scripts/libs/jquery-1.9.1.min.js"></script>
+    <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false&libraries=drawing,geometry,places"></script>
+    <script>
+        if (!LOMOND) var LOMOND = {};
+        var defaultMapOpt, defaultPolygonOpt, propSrc, propArr;
+        defaultMapOpt = {
+            center: new google.maps.LatLng(51.50714, -0.092955),
+            zoom: 13,
+            mapTypeId: google.maps.MapTypeId.ROADMAP,
+            disableDefaultUI: true,
+            zoomControl: true
+        };
+        defaultPolygonOpt = {
+            clickable: true,
+            editable: true,
+            fillColor: '#ff0000',
+            fillOpacity: 0.4,
+            strokeColor: '#ff0000',
+            strokeWeight: 2,
+            strokeOpacity: 0.9
+        },
+        defaultInfoWinOpt = {
+            maxWidth: 420
+        };
+        propSrc = 'data/properties.js';
+        propArr = [];
+
+        $.ajax({
+            url: propSrc,
+            type: 'GET',
+            async: false,
+            timeout: 5000,
+            dataType: 'json',
+            success: function (data) {
+                for (var i = 0, prop; prop = data.property[i]; i++) {
+                    propArr[i] = prop;
+                }
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                alert('ajex error: ' + textStatus);
+            }
+        });
+
+        LOMOND.Maps = {
+            map: null,
+            drawingManager: null,
+            selectedShape: null,
+            mapOptions: defaultMapOpt,
+            polygonOptions: defaultPolygonOpt,
+            markers: [],
+            foundProperties: [],
+            init: function () {
+                LOMOND.Maps.map = new google.maps.Map(document.getElementById('map'), defaultMapOpt);
+
+                LOMOND.Maps.initDrawingManager();
+            },
+            initDrawingManager: function () {
+                LOMOND.Maps.drawingManager = new google.maps.drawing.DrawingManager({
+                    drawingMode: google.maps.drawing.OverlayType.POLYGON,
+                    polygonOptions: defaultPolygonOpt,
+                    drawingControl: false,
+					map: LOMOND.Maps.map
+                });
+
+                //LOMOND.Maps.drawingManager.setMap(LOMOND.Maps.map);
+				
+                google.maps.event.addListener(LOMOND.Maps.drawingManager, 'overlaycomplete', function (e) {
+                    if (e.type != google.maps.drawing.OverlayType.MARKER) {
+                        //disable drawing mode if shape isn't a marker 
+                        LOMOND.Maps.drawingManager.setDrawingMode(null);
+
+                        var newShape = e.overlay;
+                        newShape.type = e.type;
+                        /*//
+                        google.maps.event.addListener(newShape, 'click', function () {
+
+                            newShape.setOptions({ clickable: false, fillColor: '#ffff00', strokeColor: '#ffff00' });
+                            LOMOND.Maps.setSelection(newShape);
+                        });
+                        //*/
+                        newShape.setOptions({ clickable: false, fillColor: '#ffff00', strokeColor: '#ffff00' });
+                        LOMOND.Maps.setSelection(newShape);
+                    }
+                });
+
+                //google.maps.event.addListener(LOMOND.Maps.drawingManager, 'drawingmode_changed', LOMOND.Maps.clearSelection);
+                //google.maps.event.addListener(LOMOND.Maps.map, 'click', LOMOND.Maps.clearSelection);
+
+                //var polygonOptions = this.drawingManager.get('polygonOptions');
+                //polygonOptions.fillColor = '#ff0000';
+                //this.drawingManager.set('polygonOptions', polygonOptions);
+            },
+            setSelection: function (shape) {
+                LOMOND.Maps.clearSelection();
+                LOMOND.Maps.selectedShape = shape;
+                shape.setEditable(true);
+
+                var path = shape.getPath();
+
+                google.maps.event.addListener(path, 'set_at', function () {
+                    LOMOND.Maps.removeMarkers();
+                    LOMOND.Maps.setSearchButton(shape);
+                });
+                google.maps.event.addListener(path, 'insert_at', function () {
+                    LOMOND.Maps.removeMarkers();
+                    LOMOND.Maps.setSearchButton(shape);
+                });
+                google.maps.event.addListener(path, 'remove_at', function () {
+                    LOMOND.Maps.removeMarkers();
+                    LOMOND.Maps.setSearchButton(shape);
+                });
+
+                document.getElementById('poly_delete_button').disabled = false;
+
+                LOMOND.Maps.setSearchButton(shape);
+            },
+            clearSelection: function () {
+                if (LOMOND.Maps.selectedShape) {
+                    LOMOND.Maps.selectedShape.setEditable(false);
+                    LOMOND.Maps.selectedShape = null;
+                }
+            },
+            deleteSelectedShape: function () {
+                if (LOMOND.Maps.selectedShape) {
+                    LOMOND.Maps.selectedShape.setMap(null);
+                    LOMOND.Maps.selectedShape = "";
+                    document.getElementById('poly_delete_button').disabled = true;
+                    document.getElementById('search_button').disabled = true;
+                    for (var i = 0, marker; marker = LOMOND.Maps.markers[i]; i++) {
+                        marker.setMap(null);
+                    }
+                    LOMOND.Maps.removeMarkers();
+                    LOMOND.Maps.initDrawingManager();
+                }
+            },
+            setSearchButton: function (shape) {
+                //clone the button to prevent duplicating event listeners
+                var old_searchBtn = document.getElementById('search_button');
+                var searchBtn = old_searchBtn.cloneNode(true);
+                old_searchBtn.parentNode.replaceChild(searchBtn, old_searchBtn);
+                searchBtn.disabled = false;
+
+                searchBtn.addEventListener('click', function () { LOMOND.Maps.searchSelection(shape) }, false);
+            },
+            searchSelection: function (shape) {
+                if (propArr.length) {
+                    for (var i = 0, prop; prop = propArr[i]; i++) {
+                        if (google.maps.geometry.poly.containsLocation(new google.maps.LatLng(prop.latitude, prop.longitude), shape)) {
+                            console.log('Found property: ' + prop.address);
+                            LOMOND.Maps.foundProperties.push(prop);
+                        }
+                    }
+
+                    LOMOND.Maps.setMarkers(LOMOND.Maps.map, LOMOND.Maps.foundProperties);
+
+                    if (!LOMOND.Maps.foundProperties.length) {
+                        alert('No properties found in this area :-(');
+                    }
+                } else {
+                    alert('There are no properties to search');
+                }
+            },
+            setMarkers: function (map, properties) {
+                var infowindow = new google.maps.InfoWindow(defaultInfoWinOpt);
+
+                for (var i = 0, total = properties.length; i < total; i++) {
+                    var property = properties[i];
+                    var myLatlng = new google.maps.LatLng(property.latitude, property.longitude);
+                    var contentStr = '<div class="prop-cont">' +
+                            '<div class="prop-pic"><img src="' + property.thumb + '" alt="property-' + property.id + '" /></div>' +
+                            '<div class="prop-detail"><h3>' + property.address + ', ' + property.postcode + '</h3>' +
+                            '<p>Asking price: <strong>' + property.price + '</strong><br />' +
+                            'Price type:  <strong>' + property.pricetype + '</strong><br />' +
+                            'Property type:  <strong>' + property.property_type + '</strong><br />' +
+                            'Placement:  <strong>' + property.property_placement + '</strong><br />' +
+                            'Number of bedrooms: <strong>' + property.bedrooms + '</strong><br />' +
+                            'Ref: <strong>' + property.id + '</strong></p>' +
+                            '<p>' + property.summary + '</p>';
+
+                    LOMOND.Maps.markers.push(new google.maps.Marker({
+                        position: myLatlng,
+                        map: map,
+                        animation: google.maps.Animation.DROP,
+                        info: contentStr
+                    }));
+                }
+
+                for (var j = 0, total = LOMOND.Maps.markers.length; j < total; j++) {
+                    google.maps.event.addListener(LOMOND.Maps.markers[j], 'click', function () {
+                        infowindow.setContent(this.info);
+                        infowindow.open(LOMOND.Maps.map, this);
+                    });
+                }
+                document.getElementById('search_button').disabled = true;
+            },
+            removeMarkers: function () {
+                for (var i = 0, marker; marker = LOMOND.Maps.markers[i]; i++) {
+                    marker.setMap(null);
+                }
+                LOMOND.Maps.markers = [];
+                LOMOND.Maps.foundProperties = [];
+            },
+            searchMap: {
+                markers: [],
+				enableSearch: function () {
+				    var input = document.getElementById('target');
+				    var searchBox = new google.maps.places.SearchBox(input);
+
+				    google.maps.event.addListener(searchBox, 'places_changed', function () {
+				        var places = searchBox.getPlaces();
+
+				        for (var i = 0, marker; marker = LOMOND.Maps.searchMap.markers[i]; i++) {
+				            marker.setMap(null);
+				        }
+				        LOMOND.Maps.searchMap.markers = [];
+
+				        var bounds = new google.maps.LatLngBounds();
+
+				        for (var i = 0, place; place = places[i]; i++) {
+				            var image = {
+				                url: place.icon,
+				                size: new google.maps.Size(71, 71),
+				                origin: new google.maps.Point(0, 0),
+				                anchor: new google.maps.Point(17, 34),
+				                scaledSize: new google.maps.Size(25, 25)
+				            };
+
+				            var marker = new google.maps.Marker({
+				                map: LOMOND.Maps.map,
+				                icon: image,
+				                title: place.name,
+				                position: place.geometry.location
+				            });
+				            LOMOND.Maps.searchMap.markers.push(marker);
+
+				            bounds.extend(place.geometry.location);
+				        }
+				        var center = bounds.getCenter();
+				        LOMOND.Maps.map.panTo(center);
+				        //LOMOND.Maps.map.fitBounds(bounds)
+				    });
+
+				}
+			}
+        }
+		
+        google.maps.event.addDomListener(window, 'load', LOMOND.Maps.init);
+		
+    </script>
+</head>
+<body>
+	<h1>Map test</h1>
+    <div id="panel">
+    	<input type="text" id="target" placeholder="Street, town/city, post code" onKeyUp="LOMOND.Maps.searchMap.enableSearch();return false;" autocomplete="off" />
+        
+        <input type="button" id="poly_delete_button" value="Reset canvas" onclick="LOMOND.Maps.deleteSelectedShape();return false;" disabled="disabled" />
+        <input type="button" id="search_button" value="Search within chosen area for properties" disabled="disabled" />
+    </div>
+    <div id="map-wrapper">
+        <div id="map"></div>
+    </div>
+	
+</body>
+</html>
