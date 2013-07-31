@@ -1,4 +1,4 @@
 googlemaps
 ==========
 
-Google Maps (LOMOND Residential)
+Google Maps (test project)
