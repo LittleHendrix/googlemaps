@@ -106,14 +106,45 @@
     <script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false&libraries=drawing,geometry,places"></script>
     <script>
         if (!LOMOND) var LOMOND = {};
-        var defaultMapOpt, defaultPolygonOpt, propSrc, propArr;
+        if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(location_success, location_error);
+            function location_success(position) {
+                var latitude = position.coords.latitude;
+                var longitude = position.coords.longitude;
+                setDefaultLocation(latitude, longitude);
+
+            }
+            function location_error(geoPositionError) {
+                setDefaultLocation(51.50714, -0.092955);
+                switch (geoPositionError.code) {
+                    case 0:
+                        console.log("An unknown error occurred");
+                        break;
+                    case 1:
+                        console.log("Permission to use Geolocation was denied");
+                        break;
+                    case 2:
+                        console.log("Geolocation position unavailable");
+                        break;
+                    case 3:
+                        console.log("Geolocation request timeout");
+                        break;
+                }
+            }
+        }
+        function setDefaultLocation(lat, lng) {
+            return new google.maps.LatLng(lat, lng);
+        }
+
+        var defaultLocation = setDefaultLocation(51.50714, -0.092955), defaultZoom = 13, defaultMapOpt, defaultPolygonOpt, propSrc, propArr;
+        
         defaultMapOpt = {
-            center: new google.maps.LatLng(51.50714, -0.092955),
-            zoom: 13,
+            center: defaultLocation,
+            zoom: defaultZoom,
             mapTypeId: google.maps.MapTypeId.ROADMAP,
             disableDefaultUI: true,
             zoomControl: true
-        };
+        },
         defaultPolygonOpt = {
             clickable: true,
             editable: true,
@@ -122,11 +153,11 @@
             strokeColor: '#ff0000',
             strokeWeight: 2,
             strokeOpacity: 0.9
-        };
+        },
         defaultInfoWinOpt = {
             maxWidth: 420
-        };
-        propSrc = 'data/properties.js';
+        },
+        propSrc = 'data/properties.js',
         propArr = [];
 
         $.ajax({
@@ -228,18 +259,15 @@
                 if (LOMOND.Maps.selectedShape) {
                     LOMOND.Maps.selectedShape.setMap(null);
                     LOMOND.Maps.selectedShape = "";
-                    document.getElementById('poly_delete_button').disabled = true;
-                    document.getElementById('search_button').disabled = true;
-                    for (var i = 0, marker; marker = LOMOND.Maps.markers[i]; i++) {
-                        marker.setMap(null);
-                    }
-                    LOMOND.Maps.removeMarkers();
-                    LOMOND.Maps.initDrawingManager();
                 }
+                document.getElementById('poly_delete_button').disabled = true;
+                document.getElementById('poly_search_button').disabled = true;
+                LOMOND.Maps.removeMarkers();
+                LOMOND.Maps.initDrawingManager();
             },
             setSearchButton: function (shape) {
                 //clone the button to prevent duplicating event listeners
-                var old_searchBtn = document.getElementById('search_button');
+                var old_searchBtn = document.getElementById('poly_search_button');
                 var searchBtn = old_searchBtn.cloneNode(true);
                 old_searchBtn.parentNode.replaceChild(searchBtn, old_searchBtn);
                 searchBtn.disabled = false;
@@ -259,7 +287,7 @@
 
                     LOMOND.Maps.printMsg('Found ' + LOMOND.Maps.foundProperties.length + ' properties');
 
-                    if (!LOMOND.Maps.foundProperties.length) {
+                    if (LOMOND.Maps.foundProperties.length == 0) {
                         alert('No properties found in this area :-(');
                     }
                 } else {
@@ -302,7 +330,7 @@
                         infowindow.open(LOMOND.Maps.map, this);
                     });
                 }
-                document.getElementById('search_button').disabled = true;
+                document.getElementById('poly_search_button').disabled = true;
             },
             removeMarkers: function () {
                 for (var i = 0, marker; marker = LOMOND.Maps.markers[i]; i++) {
@@ -312,7 +340,7 @@
                 LOMOND.Maps.foundProperties = [];
             },
             searchLocation: function (location) {
-                if (location.length) {
+                if (location.length > 0) {
                     var cleanParam = encodeURIComponent(location);
                     var url = "https://maps.googleapis.com/maps/api/geocode/json?address="+ cleanParam +"&components=country:UK&sensor=false";
 
@@ -339,10 +367,16 @@
                                 }
                             }
 
+                            if (LOMOND.Maps.foundProperties.length > 0) {
+                                //disable drawing mode if found properties
+                                LOMOND.Maps.drawingManager.setDrawingMode(null);
+                                document.getElementById('poly_delete_button').disabled = false;
+                            }
+
                             LOMOND.Maps.setMarkers(LOMOND.Maps.map, LOMOND.Maps.foundProperties);
 
                             LOMOND.Maps.printMsg('Found ' + LOMOND.Maps.foundProperties.length + ' properties near ' + data.results[0].formatted_address);
-
+                            document.getElementById('target').value = "";
                         },
                         error: function (jqXHR, textStatus, errorThrown) {
                             alert('ajex error: ' + textStatus);
@@ -354,7 +388,7 @@
             },
             printMsg: function (msg) {
                 var timeoutId;
-                if (msg.length && msg != document.getElementById('msg').innerHTML) {
+                if (msg.length > 0 && msg != document.getElementById('msg').innerHTML) {
                     document.getElementById('msg').innerHTML = msg;
                     //timeoutId = window.setTimeout(removeAlert,3000);
                 }
@@ -418,9 +452,9 @@
     	<!--<input type="text" id="target" placeholder="Street, town/city, post code" onKeyUp="LOMOND.Maps.searchMap.enableSearch();return false;" autocomplete="off" />-->
         <input type="text" id="target" placeholder="Street, town/city, post code" autocomplete="off" />
 
-        <input type="button" value="Search" onclick="LOMOND.Maps.searchLocation(document.getElementById('target').value)" />
+        <input type="button" id="search_button" value="Search" onclick="LOMOND.Maps.searchLocation(document.getElementById('target').value)" />
         <input type="button" id="poly_delete_button" value="Reset canvas" onclick="LOMOND.Maps.deleteSelectedShape();return false;" disabled="disabled" />
-        <input type="button" id="search_button" value="Search within chosen area for properties" disabled="disabled" />
+        <input type="button" id="poly_search_button" value="Search within chosen area for properties" disabled="disabled" />
 
         <span id="msg"></span>
     </div>
