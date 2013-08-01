@@ -111,11 +111,11 @@
             function location_success(position) {
                 var latitude = position.coords.latitude;
                 var longitude = position.coords.longitude;
-                setDefaultLocation(latitude, longitude);
+                var liveLatLng = setDefaultLocation(latitude, longitude);
 
+                LOMOND.Maps.map.setCenter(liveLatLng);
             }
             function location_error(geoPositionError) {
-                setDefaultLocation(51.50714, -0.092955);
                 switch (geoPositionError.code) {
                     case 0:
                         console.log("An unknown error occurred");
@@ -186,7 +186,6 @@
             foundProperties: [],
             init: function () {
                 LOMOND.Maps.map = new google.maps.Map(document.getElementById('map'), defaultMapOpt);
-
                 LOMOND.Maps.initDrawingManager();
             },
             initDrawingManager: function () {
