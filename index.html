@@ -115,7 +115,7 @@
                 var liveLatLng = setDefaultLocation(latitude, longitude);
 
                 LOMOND.Maps.map.setCenter(liveLatLng);
-                LOMOND.Maps.printMsg("Your current search location has been set to ");
+                LOMOND.Maps.printMsg("Your current search location has been set to " + liveLatLng.toString());
 
                 //set up directions
                 LOMOND.Maps.origin = liveLatLng;
@@ -277,6 +277,7 @@
                 _this.removeMarkers();
                 _this.removeRoute();
                 _this.initDrawingManager();
+                _this.printMsg('Map search has been reset');
             },
             setSearchButton: function (shape) {
                 var _this = LOMOND.Maps;
@@ -419,7 +420,7 @@
             },
             initDirections: function () {
                 var _this = LOMOND.Maps;
-                _this.directionsDisplay = new google.maps.DirectionsRenderer();
+                _this.directionsDisplay = new google.maps.DirectionsRenderer({ draggable: true });
                 _this.directionsDisplay.setMap(_this.map);
                 
                 var travelModeHtml = '<strong>Mode of travel: </strong>' +
@@ -428,12 +429,17 @@
                     '<option value="WALKING">Walking</option>' +
                     '<option value="BICYCLING">Bicycling</option>' +
                     '<option value="TRANSIT">Transit</option></select>' +
-                    '<div id="start_finish"><strong>Origin: </strong><span id="startpoint">' + _this.origin.toString() + '</span>' +
+                    '<div id="start_finish"><strong>Start point: </strong><span id="startpoint">' + _this.origin.toString() + '</span>' +
                     '<strong>Destination: </strong><select id="destinations" onchange="LOMOND.Maps.directionRequestChanged();"></select>' +
                     '<input type="button" id="show_direction_button" onclick="LOMOND.Maps.calcRoute();" value="Show direction to property" disabled="disabled" />' +
                     '</div>';
 
                 document.getElementById('directions').innerHTML = travelModeHtml;
+
+                google.maps.event.addListener(_this.directionsDisplay, 'directions_changed', function () {
+                    var directions = _this.directionsDisplay.getDirections();
+                    _this.origin = directions.routes[0].legs[0].start_location;
+                });
             },
             calcRoute: function () {
                 var _this = LOMOND.Maps;
@@ -534,7 +540,7 @@
         <input type="text" id="target" placeholder="Street, town/city, post code" autocomplete="off" />
 
         <input type="button" id="search_button" value="Search" onclick="LOMOND.Maps.searchLocation(document.getElementById('target').value)" />
-        <input type="button" id="poly_delete_button" value="Reset canvas" onclick="LOMOND.Maps.deleteSelectedShape();return false;" disabled="disabled" />
+        <input type="button" id="poly_delete_button" value="Start over" onclick="LOMOND.Maps.deleteSelectedShape();return false;" disabled="disabled" />
         <input type="button" id="poly_search_button" value="Search within chosen area for properties" disabled="disabled" />
 
         <span id="msg"></span>
